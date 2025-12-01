@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Công cụ Xiangqi: Nước ăn an toàn của Xe (8x9)</title>
+	<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+	<div class="app">
+		<div class="decorative-section">
+			<p>Được FH Phù Bé Na 🐍 tạo ra sau chuỗi ngày bất lực vì không thể leo top cờ... Không chấp nhận được sự thật phủ phàng rằng mình có thể đánh cờ thua 1 con hải cẩu 🦭 hay 1 con hàu 🦪, thậm chí là 🌊, 🌿, 🐉, ☀️. Phù Bé Na bỏ ra 120 năm tế luyện pháp bảo. Giờ đây... Thần Khí Nơi Tay, Thiên Hạ Ta Có 😤! Này là còn không top đánh cờ được thì thôi đi ngủ 💤😴</p>
+		</div>
+		<div class="controls">
+			<div class="row">
+				<div class="group">
+					<label class="group-label">Thêm quân địch</label>
+					<div id="palette" class="palette">
+						<button class="token" data-piece="pawn">卒</button>
+						<button class="token" data-piece="advisor">士</button>
+						<button class="token" data-piece="elephant">象</button>
+						<button class="token" data-piece="cannon">炮</button>
+						<button class="token" data-piece="knight">馬</button>
+						<button class="token" data-piece="rook">車</button>
+						<button class="token" data-piece="general">將</button>
+					</div>
+				</div>
+				<div class="group">
+					<button id="deleteBtn" class="secondary">Xóa 1 Quân</button>
+					<button id="resetBtn" class="secondary">Làm mới</button>
+				</div>
+			</div>
+			<div class="row help">
+				<ul>
+					<li>Di chuyển: bấm vào một quân để nhấc lên, rồi bấm ô đích để thả (nhấp phải để hủy).</li>
+					<li>Thêm quân: bấm vào quân ở trên, rồi bấm vào ô trống để đặt.</li>
+					<li>Xe màu vàng được tô sáng là Xe của bạn.</li>
+				</ul>
+			</div>
+		</div>
+		<div class="board-wrap">
+			<div id="board" class="board" aria-label="Bàn cờ Tượng Kỳ 8x9" role="grid"></div>
+			<div class="labels">
+				<div id="fileLabels" class="file-labels"></div>
+				<div id="rankLabels" class="rank-labels"></div>
+			</div>
+		</div>
+		<div class="sidebar">
+			<h3>Các nước ăn an toàn</h3>
+			<ol id="moveList" class="move-list"></ol>
+		</div>
+	</div>
+
+	<script src="engine.js"></script>
+	<script src="app.js"></script>
+</body>
+</html>

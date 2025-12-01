@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Puzzle Nối Đường 7x7 — Giả lập & Log nước đi</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel-2:#1f2430; --ink:#e7e9ee; --muted:#a7b0c0;
+    --accent:#56b0ff; --ok:#2ecc71; --warn:#ffb84d; --danger:#ff6b6b;
+    --cell:#222733; --grid:#2b3242; --highlight:#343c52; --arrow:#111824;
+    --red:#e74c3c; --blue:#3498db; --yellow:#f1c40f; --purple:#2ecc71; --special:#00d1b2;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  }
+  header{
+    display:flex; gap:12px; align-items:center; justify-content:space-between;
+    padding:14px 18px; background:linear-gradient(180deg,#111420, #0e121a);
+    border-bottom:1px solid #1f2430; position:sticky; top:0; z-index:3;
+  }
+  header h1{ font-size:16px; margin:0; letter-spacing:.2px; color:#d7e6ff }
+  .wrap{
+    display:grid; grid-template-columns: 310px 1fr 380px; gap:16px;
+    padding:16px; max-width:1400px; margin:0 auto;
+  }
+  .card{
+    background:var(--panel); border:1px solid #202636; border-radius:14px; padding:14px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25);
+  }
+  .card h2{ margin:0 0 10px; font-size:15px; color:#cfe4ff }
+  .subtle{ color:var(--muted); font-size:12px }
+  /* Board */
+  .board{
+    background:var(--panel-2); border-radius:16px; padding:12px; border:1px solid #253049;
+  }
+  .grid{
+    display:grid; grid-template-columns: repeat(7, 56px); grid-template-rows: repeat(7,56px);
+    gap:6px; user-select:none;
+  }
+  .cell{
+    width:56px; height:56px; border-radius:10px; background:var(--cell);
+    border:1px solid var(--grid); position:relative; cursor:pointer; overflow:hidden;
+    transition:transform .05s ease, box-shadow .15s ease;
+  }
+  .cell:hover{ transform:translateY(-1px); box-shadow:0 6px 12px rgba(0,0,0,.25) }
+  .cell .badge{
+    position:absolute; top:6px; right:6px; padding:1px 6px; border-radius:999px; font-size:11px;
+    background:rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.08); color:#fff;
+  }
+  .cell .coord{
+    position:absolute; bottom:4px; right:6px; font-size:10px; color:#9aa6bf80;
+  }
+  .cell .arrow{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:22px; color:#fff; text-shadow:0 1px 0 rgba(0,0,0,.5);
+    mix-blend-mode:normal;
+  }
+  .cell.path { outline:2px dashed var(--accent); outline-offset:-4px; background:linear-gradient(180deg,#243148,#1b2230) }
+  .cell.hero { box-shadow:0 0 0 2px #fff inset, 0 0 0 5px #00e0ff40 inset }
+  .cell.special{ box-shadow:0 0 0 2px var(--special) inset, 0 0 0 6px #00d1b222 inset }
+  .swatch{ width:26px; height:26px; border-radius:7px; border:1px solid #ffffff22; cursor:pointer }
+  .swatch.sel{ outline:2px solid #fff; outline-offset:2px }
+  .row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap }
+  .tools{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
+  .btn{
+    background:#2a3446; border:1px solid #34425e; color:#e9f2ff; padding:8px 10px; border-radius:10px; cursor:pointer;
+    display:flex; align-items:center; gap:8px; justify-content:center; text-align:center;
+  }
+  .btn:hover{ background:#33425b }
+  .btn.primary{ background:linear-gradient(180deg,#2f83ff,#1d6dff); border-color:#2f83ff }
+  .btn.ghost{ background:transparent; border-color:#3a475f }
+  .btn.small{ padding:6px 8px; font-size:12px }
+  .tool.sel{ background:#3b4b67; border-color:#5c7db8 }
+  .legend{ display:flex; gap:10px; flex-wrap:wrap }
+  .chip{ padding:4px 8px; border:1px solid #3a475f; border-radius:999px; background:#222a3a; color:#bcd0ff; font-size:12px }
+  /* Log */
+  .log{ max-height:560px; overflow:auto; padding-right:6px }
+  .option{
+    border:1px solid #2f3a53; border-radius:12px; padding:10px; margin-bottom:10px; background:#161b25;
+  }
+  .option h3{ margin:0 0 6px; font-size:13px; color:#e9f2ff }
+  .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace }
+  /* Color helpers */
+  .c-red{ background:var(--red) } .c-blue{ background:var(--blue) }
+  .c-yellow{ background:var(--yellow) } .c-purple{ background:var(--purple) }
+  .tile-red{ background:linear-gradient(180deg,#f06a5b,#d94a3b) }
+  .tile-blue{ background:linear-gradient(180deg,#4dadf7,#2c82cd) }
+  .tile-yellow{ background:linear-gradient(180deg,#ffd85a,#f0bc17) }
+  .tile-purple{ background:linear-gradient(180deg,#7fe7a1,#2ecc71) }
+  .tile-monster{ background:linear-gradient(180deg,#5a1a1a,#351010) }
+  .tile-special{ background:linear-gradient(180deg,#2cd9b7,#0da88d) }
+  .tile-empty{ background:var(--cell) }
+  .note{font-size:12px;color:#a9b7d0}
+  .footer{margin-top:8px; display:flex; gap:8px; flex-wrap:wrap}
+  .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; background:#111723; border:1px solid #2c3650; border-bottom-color:#1f2740; padding:2px 6px; border-radius:6px; color:#d7e6ff; font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🧩 Một Sản Phẩm do FH Phù Bé 🐍  tạo ra! Do quá rãnh rỗi nên bỏ ra 3 tiếng ngồi làm.</h1>
+  <div class="legend">
+    <span class="chip">Nối 8 hướng</span>
+    <span class="chip">Ô Đặc Biệt = đổi màu</span>
+    <span class="chip">Quái: vào được khi độ dài ≥ HP</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- SETUP PANEL -->
+  <section class="card" id="setup">
+    <h2>Bảng điều khiển</h2>
+    <div class="subtle" style="margin-bottom:10px">
+      Chọn công cụ & màu, rồi thao tác trên board 7×7.
+    </div>
+
+    <div class="row" style="margin:8px 0 6px">
+      <strong>Màu hiện tại:</strong>
+      <div class="swatch c-red" data-color="red" title="Đỏ"></div>
+      <div class="swatch c-blue" data-color="blue" title="Xanh dương"></div>
+      <div class="swatch c-yellow" data-color="yellow" title="Vàng"></div>
+      <div class="swatch c-purple" data-color="purple" title="Xanh Lá"></div>
+    </div>
+    <div class="note">💡 Chuột phải + giữ & kéo để tô nhanh theo màu đang chọn.</div>
+
+    <div style="height:10px"></div>
+    <h2>Công cụ</h2>
+    <div class="tools" id="tools">
+      <button class="btn tool" data-tool="paint">🎨 Tô màu</button>
+      <button class="btn tool" data-tool="erase">🧹 Xoá ô</button>
+      <button class="btn tool" data-tool="hero">🧍 Nhân vật</button>
+      <button class="btn tool" data-tool="monster">👾 Quái vật</button>
+      <button class="btn tool" data-tool="special">⭐ Ô đặc biệt</button>
+    </div>
+    <div class="footer">
+      <button class="btn ghost small" id="clearArrows">❌ Xoá mũi tên</button>
+      <button class="btn ghost small" id="resetBoard">♻️ Làm trống board</button>
+      <button class="btn primary small" id="analyze">🔎 Phân tích từ Nhân vật</button>
+    </div>
+
+    <div style="margin-top:12px" class="note">
+      <span class="kbd">Chuột trái</span> đặt/tô 1 ô •
+      <span class="kbd">Chuột phải + kéo</span> tô nhanh •
+      Nhấp vào **ô Nhân vật** để phân tích.
+    </div>
+  </section>
+
+  <!-- BOARD -->
+  <section class="board">
+    <h2>Board 7×7</h2>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <!-- LOG -->
+  <section class="card">
+    <h2>Log nước đi (Options)</h2>
+    <div class="subtle" style="margin-bottom:10px">Sắp xếp: Dài ⬇ • Quái diệt ⬇</div>
+    <div id="log" class="log"></div>
+  </section>
+</div>
+
+<script>
+    (() => {
+      // ---------- Data & State ----------
+      const N = 7;
+      const COLORS = ['red','blue','yellow','purple'];
+      const COLOR_CLASS = { red:'tile-red', blue:'tile-blue', yellow:'tile-yellow', purple:'tile-purple' };
+    
+      /** cell.type: 'empty'|'color'|'monster'|'hero'|'special'
+          cell.color: 'red'|'blue'|'yellow'|'purple'|null
+          cell.hp: number|null
+       */
+      let board = Array.from({length:N},()=>Array.from({length:N},()=>({type:'empty', color:null, hp:null})));
+    
+      let currentTool = 'paint';
+      let currentColor = 'red';
+      let paintingRight = false;    // tô nhanh bằng chuột phải (như cũ)
+      let paintingLeft  = false;    // NEW: tô/xoá nhanh bằng chuột trái khi đang chọn paint/erase
+      let heroPos = null;           // {r,c} or null
+      let lastOptions = [];         // cached options
+      let activeViewKey = null;     // NEW: để toggle "Xem" ↔ "Ẩn"
+    
+      // ---------- DOM ----------
+      const gridEl = document.getElementById('grid');
+      const logEl  = document.getElementById('log');
+    
+      // Build initial grid DOM
+      for(let r=0;r<N;r++){
+        for(let c=0;c<N;c++){
+          const d = document.createElement('div');
+          d.className = 'cell tile-empty';
+          d.dataset.r = r; d.dataset.c = c;
+          const coord = document.createElement('div');
+          coord.className = 'coord'; coord.textContent = `(${r+1},${c+1})`;
+          d.appendChild(coord);
+          gridEl.appendChild(d);
+        }
+      }
+    
+      function renderCell(r,c){
+        const cell = board[r][c];
+        const el = getCellEl(r,c);
+        // reset classes
+        el.className = 'cell';
+        // base background
+        if(cell.type==='color'){
+          el.classList.add(COLOR_CLASS[cell.color]||'tile-empty');
+        }else if(cell.type==='monster'){
+          el.classList.add('tile-monster');
+        }else if(cell.type==='special'){
+          el.classList.add('tile-special','special');
+        }else if(cell.type==='hero'){
+          el.classList.add('tile-empty','hero');
+        }else{
+          el.classList.add('tile-empty');
+        }
+        // remove old badges/arrows but keep coord
+        [...el.querySelectorAll('.badge,.arrow')].forEach(x=>x.remove());
+        if(cell.type==='monster'){
+          const b = document.createElement('div');
+          b.className = 'badge';
+          b.textContent = `HP ${cell.hp ?? 0}`;
+          el.appendChild(b);
+        }else if(cell.type==='special'){
+          const b = document.createElement('div'); b.className='badge'; b.textContent='*';
+          el.appendChild(b);
+        }else if(cell.type==='hero'){
+          const b = document.createElement('div'); b.className='badge'; b.textContent = 'YOU';
+          el.appendChild(b);
+        }
+      }
+      function renderAll(){ for(let r=0;r<N;r++) for(let c=0;c<N;c++) renderCell(r,c) }
+    
+      function getCellEl(r,c){ return gridEl.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`) }
+    
+      // ---------- Tools UI ----------
+      const swatches = [...document.querySelectorAll('.swatch')];
+      const tools = [...document.querySelectorAll('.tool')];
+      function setColor(col){
+        currentColor = col;
+        swatches.forEach(s => s.classList.toggle('sel', s.dataset.color===col));
+      }
+      function setTool(tool){
+        currentTool = tool;
+        tools.forEach(t => t.classList.toggle('sel', t.dataset.tool===tool));
+      }
+      swatches.forEach(s=> s.addEventListener('click', ()=> setColor(s.dataset.color)) );
+      tools.forEach(t=> t.addEventListener('click', ()=> setTool(t.dataset.tool)) );
+      setColor('red'); setTool('paint');
+    
+      // ---------- Board interactions ----------
+      // prevent default context menu on board
+      gridEl.addEventListener('contextmenu', e => e.preventDefault());
+    
+      // NEW: tô/xoá nhanh bằng chuột trái khi đang chọn paint/erase
+      gridEl.addEventListener('mousedown', (e)=>{
+        const cellEl = e.target.closest('.cell'); if(!cellEl) return;
+        const r = +cellEl.dataset.r, c = +cellEl.dataset.c;
+    
+        if(e.button===2){ // chuột phải => bắt đầu tô nhanh theo màu đang chọn
+          paintingRight = true;
+          applyTool(r,c,'paint'); // tô màu (theo yêu cầu)
+          return;
+        }
+    
+        if(e.button===0){ // chuột trái
+          if(currentTool==='paint' || currentTool==='erase'){
+            paintingLeft = true;
+          }
+          applyTool(r,c,currentTool);
+        }
+      });
+    
+      gridEl.addEventListener('mouseover', (e)=>{
+        const cellEl = e.target.closest('.cell'); if(!cellEl) return;
+        const r = +cellEl.dataset.r, c = +cellEl.dataset.c;
+        // kéo chuột trái để tô/xoá nhanh
+        if(paintingLeft){
+          applyTool(r,c,currentTool);
+          return;
+        }
+        // kéo chuột phải để tô nhanh
+        if(paintingRight){
+          applyTool(r,c,'paint');
+          return;
+        }
+      });
+    
+      window.addEventListener('mouseup', ()=>{
+        paintingLeft=false;
+        paintingRight=false;
+      });
+    
+      function applyTool(r,c,tool){
+        const cell = board[r][c];
+        if(tool==='paint'){
+            // CHỈ chặn hero & monster; CHO PHÉP sơn đè special
+            if(cell.type==='hero' || cell.type==='monster') return;
+            board[r][c] = {type:'color', color:currentColor, hp:null}; // ghi đè hoàn toàn
+            renderCell(r,c);
+            return;
+        }
+
+        if(tool==='erase'){
+            if(cell.type==='hero') heroPos=null;
+            board[r][c] = {type:'empty', color:null, hp:null};
+            renderCell(r,c);
+            return;
+        }
+        if(tool==='hero'){
+          if(heroPos) { const {r:hr,c:hc}=heroPos; board[hr][hc]={type:'empty',color:null,hp:null}; renderCell(hr,hc); }
+          if(cell.type==='monster'){ alert('Không thể đặt Nhân vật lên ô Quái.'); return; }
+          board[r][c] = {type:'hero', color:null, hp:null}; heroPos={r,c};
+          renderCell(r,c);
+          return;
+        }
+        if(tool==='monster'){
+          const hpStr = prompt('HP Quái vật = ?', '3');
+          if(hpStr===null) return;
+          const hp = Math.max(0, Math.floor(Number(hpStr)));
+          if(Number.isNaN(hp)){ alert('HP không hợp lệ.'); return; }
+          if(cell.type==='hero'){ alert('Không thể đặt Quái lên ô Nhân vật.'); return; }
+          board[r][c] = {type:'monster', color:null, hp};
+          renderCell(r,c);
+          return;
+        }
+        if(tool==='special'){
+          if(cell.type==='hero'){ alert('Không thể đặt Ô đặc biệt lên ô Nhân vật.'); return; }
+          board[r][c] = {type:'special', color:null, hp:null};
+          renderCell(r,c);
+          return;
+        }
+      }
+    
+      // ---------- Path finding ----------
+      const DIRS = [
+        [-1, 0], [1, 0], [0,-1], [0, 1],  // orthogonal
+        [-1,-1],[-1, 1],[ 1,-1],[ 1, 1],  // diagonals
+      ];
+      const ARROW = {
+        "-1,0":"↑","1,0":"↓","0,-1":"←","0,1":"→",
+        "-1,-1":"↖","-1,1":"↗","1,-1":"↙","1,1":"↘"
+      };
+    
+      function neighbors8(r,c){
+        const res=[];
+        for(const [dr,dc] of DIRS){
+          const nr=r+dr, nc=c+dc;
+          if(nr>=0 && nr<N && nc>=0 && nc<N) res.push([nr,nc,dr,dc]);
+        }
+        return res;
+      }
+    
+      // ====== ĐÃ THAY THẾ: HÀM PHÂN TÍCH TỐI ƯU ======
+      function analyzeFromHero(){
+        clearArrows();
+        if(!heroPos){ alert('Hãy đặt Nhân vật trước.'); return; }
+        const {r:hr,c:hc} = heroPos;
+
+        const opts = [];
+        let nodesExplored = 0;
+        const HARD_LIMIT = 800000;
+
+        function key(r,c){ return `${r},${c}` }
+
+        // Khởi phát từ các ô kề hero
+        for(const [nr,nc] of neighbors8(hr,hc)){
+            const first = board[nr][nc];
+            if(first.type==='empty' || first.type==='hero') continue;
+
+            // Bước 1: chưa có chuỗi (runLen=0) nên KHÔNG thể vào quái HP>0
+            if(first.type==='monster' && (first.hp ?? 0) > 0) continue;
+
+            const path = [{r:nr,c:nc}];
+            const killed = [];
+            let curColor = null;
+            let wildcard = false;
+            let runLen = 0; // chuỗi hiện tại dùng để giết quái
+
+            if(first.type==='color'){
+            curColor = first.color;
+            wildcard = false;
+            runLen = 1;                 // bước đầu tiên
+            }else if(first.type==='special'){
+            curColor = null;
+            wildcard = true;            // đổi màu ở bước kế
+            runLen = 1;
+            }else if(first.type==='monster'){
+            // trường hợp HP<=0 (hiếm) → giết ngay, runLen = 0 - HP (coi như 0)
+            killed.push({r:nr,c:nc,hp:first.hp});
+            wildcard = true;
+            runLen = Math.max(0, 0 - (first.hp ?? 0));
+            }
+            dfs(nr,nc,curColor,path,killed,wildcard,runLen);
+        }
+
+        // DFS đầy đủ, có theo dõi runLen
+        function dfs(r,c,curColor,path,killed,wildcard,runLen){
+            nodesExplored++;
+            if(nodesExplored > HARD_LIMIT) return;
+
+            const visited = new Set(path.map(p=>key(p.r,p.c)));
+            const moves = [];
+
+            for(const [nr,nc] of neighbors8(r,c)){
+            if(visited.has(key(nr,nc))) continue;
+            if(nr===heroPos.r && nc===heroPos.c) continue;
+            const tile = board[nr][nc];
+            if(tile.type==='empty') continue;
+
+            if(tile.type==='color'){
+                if(wildcard || (curColor && tile.color===curColor)){
+                moves.push({
+                    nr,nc,
+                    nextColor: tile.color,
+                    nextWildcard: false,
+                    killed: null,
+                    nextRun: runLen + 1           // đi thêm 1 ô màu
+                });
+                }
+            }else if(tile.type==='special'){
+                moves.push({
+                nr,nc,
+                nextColor: null,
+                nextWildcard: true,
+                killed: null,
+                nextRun: runLen + 1             // đi thêm 1 ô, được đổi màu ở bước kế
+                });
+            }else if(tile.type==='monster'){
+                const hp = tile.hp ?? 0;
+                if(runLen >= hp){
+                moves.push({
+                    nr,nc,
+                    nextColor: null,
+                    nextWildcard: true,           // giết quái → đổi màu ở bước kế
+                    killed: {r:nr,c:nc,hp:hp},
+                    nextRun: Math.max(0, runLen - hp) // TRỪ CHUỖI THEO HP
+                });
+                }
+            }
+            }
+
+            // Heuristic Warnsdorff-style (ưu tiên ô có ít lối thoát)
+            moves.sort((A,B)=>{
+            const deg = (x)=>{
+                let d=0;
+                const v2 = new Set([...visited, key(x.nr,x.nc)]);
+                for(const [xr,xc] of neighbors8(x.nr,x.nc)){
+                if(v2.has(key(xr,xc))) continue;
+                if(xr===heroPos.r && xc===heroPos.c) continue;
+                const t = board[xr][xc];
+                if(t.type==='empty') continue;
+
+                if(t.type==='color'){
+                    if(x.nextWildcard || (x.nextColor && t.color===x.nextColor)) d++;
+                }else if(t.type==='special'){
+                    d++;
+                }else if(t.type==='monster'){
+                    const hp2 = t.hp ?? 0;
+                    if(x.nextRun >= hp2) d++;     // dùng run sau khi đã đi tới x
+                }else{
+                    // hero đã chặn ở trên
+                }
+                }
+                return d;
+            };
+            return deg(A) - deg(B);
+            });
+
+            if(moves.length===0){
+            const sumHP = killed.reduce((s,k)=>s+(k.hp||0),0);
+            opts.push({
+                path: [...path],
+                length: path.length,         // tổng ô đi qua (để chấm độ dài)
+                killed: [...killed],
+                sumHP,
+                start: {...path[0]},
+                end: {...path[path.length-1]}
+            });
+            return;
+            }
+
+            for(const mv of moves){
+            const np = [...path, {r:mv.nr, c:mv.nc}];
+            const nk = mv.killed ? [...killed, mv.killed] : killed;
+            dfs(mv.nr, mv.nc, mv.nextColor, np, nk, mv.nextWildcard, mv.nextRun);
+            }
+        }
+
+        // Sắp xếp: Dài ↓, Số quái ↓, Tổng HP ↓
+        opts.sort((a,b)=>{
+            if(b.length!==a.length) return b.length - a.length;
+            if(b.killed.length!==a.killed.length) return b.killed.length - a.killed.length;
+            return b.sumHP - a.sumHP;
+        });
+
+        lastOptions = opts;
+        renderLog(opts);
+
+        if(nodesExplored >= HARD_LIMIT){
+            const warn = document.createElement('div');
+            warn.className = 'subtle';
+            warn.style.marginTop = '6px';
+            warn.textContent = '⚠️ Đã đạt giới hạn tìm kiếm — có thể chưa liệt kê hết mọi đường.';
+            document.getElementById('log').prepend(warn);
+        }
+        }
+      
+      // ====== HẾT PHẦN THAY ======
+    
+      function renderLog(opts){
+        logEl.innerHTML = '';
+        if(opts.length===0){
+          logEl.innerHTML = `<div class="subtle">Chưa có đường đi hợp lệ. Hãy kiểm tra cách đặt màu / ô đặc biệt / quái và nhấp lên ô Nhân vật để phân tích.</div>`;
+          return;
+        }
+        const MAX_SHOW = 50;
+        opts.slice(0,MAX_SHOW).forEach((op,idx)=>{
+          const it = document.createElement('div');
+          it.className='option';
+          const killInfo = op.killed.length ? op.killed.map(k=>`HP${k.hp}@(${k.r+1},${k.c+1})`).join(', ') : '—';
+          const thisKey = pathKey(op.path);
+          it.innerHTML = `
+            <h3>Option #${idx+1}</h3>
+            <div class="subtle">Dài: <b>${op.length}</b> ô • Quái diệt: <b>${op.killed.length}</b> • Tổng HP: <b>${op.sumHP}</b></div>
+            <div class="subtle">Bắt đầu: <span class="mono">(${op.start.r+1},${op.start.c+1})</span> • Kết thúc: <span class="mono">(${op.end.r+1},${op.end.c+1})</span></div>
+            <div class="subtle">Chi tiết quái: <span class="mono">${killInfo}</span></div>
+            <div style="margin-top:8px" class="row">
+              <button class="btn small" data-act="view">👁 Xem</button>
+              <button class="btn ghost small" data-act="copy">📋 Sao chép toạ độ</button>
+            </div>
+          `;
+          const viewBtn = it.querySelector('[data-act="view"]');
+          const copyBtn = it.querySelector('[data-act="copy"]');
+    
+          // toggle xem/ẩn
+          viewBtn.addEventListener('click', ()=>{
+            if(activeViewKey === thisKey){
+              clearArrows();
+              activeViewKey = null;
+              updateAllViewButtons();
+              return;
+            }
+            visualizePath(op.path);
+            activeViewKey = thisKey;
+            updateAllViewButtons(viewBtn);
+          });
+    
+          copyBtn.addEventListener('click', ()=>{
+            const s = op.path.map(p=>`(${p.r+1},${p.c+1})`).join(' -> ');
+            navigator.clipboard?.writeText(s);
+            copyBtn.textContent='✅ Đã sao chép'; setTimeout(()=>copyBtn.textContent='📋 Sao chép toạ độ', 900);
+          });
+          logEl.appendChild(it);
+        });
+        if(opts.length>MAX_SHOW){
+          const more = document.createElement('div');
+          more.className='subtle'; more.style.margin='8px 0 0';
+          more.textContent = `Đã ẩn bớt. Tổng số đường đi: ${opts.length}.`;
+          logEl.appendChild(more);
+        }
+    
+        function pathKey(p){ return p.map(n=>`${n.r},${n.c}`).join(';') }
+      }
+    
+      // ---------- Visualization ----------
+      function clearArrows(){
+        for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+          const el = getCellEl(r,c);
+          el.classList.remove('path');
+          [...el.querySelectorAll('.arrow')].forEach(a=>a.remove());
+        }
+        activeViewKey = null; // reset trạng thái xem
+        updateAllViewButtons();
+      }
+      function visualizePath(path){
+        clearArrows();
+        for(let i=0;i<path.length;i++){
+          const {r,c} = path[i];
+          const el = getCellEl(r,c);
+          el.classList.add('path');
+          if(i<path.length-1){
+            const nxt = path[i+1];
+            const dr = Math.sign(nxt.r - r), dc = Math.sign(nxt.c - c);
+            const arrowCh = ARROW[`${dr},${dc}`] || '•';
+            const ar = document.createElement('div'); ar.className='arrow'; ar.textContent = arrowCh;
+            el.appendChild(ar);
+          }else{
+            const ar = document.createElement('div'); ar.className='arrow'; ar.textContent = '⦿';
+            el.appendChild(ar);
+          }
+        }
+      }
+      function updateAllViewButtons(activeBtn=null){
+        document.querySelectorAll('#log [data-act="view"]').forEach(btn=>{
+          btn.textContent = (btn===activeBtn && activeViewKey) ? '🙈 Ẩn' : '👁 Xem';
+        });
+      }
+    
+      // ---------- Buttons ----------
+      document.getElementById('clearArrows').addEventListener('click', clearArrows);
+      document.getElementById('resetBoard').addEventListener('click', ()=>{
+        if(!confirm('Xoá toàn bộ board?')) return;
+        board = Array.from({length:N},()=>Array.from({length:N},()=>({type:'empty', color:null, hp:null})));
+        heroPos = null; lastOptions = []; clearArrows(); renderAll(); logEl.innerHTML='';
+      });
+      document.getElementById('analyze').addEventListener('click', analyzeFromHero);
+    
+      // Clicking hero triggers analyze
+      gridEl.addEventListener('click', (e)=>{
+        const cellEl = e.target.closest('.cell'); if(!cellEl) return;
+        const r=+cellEl.dataset.r, c=+cellEl.dataset.c;
+        if(board[r][c].type==='hero'){ analyzeFromHero(); }
+      });
+    
+      // initial render
+      renderAll();
+    
+      // --- Demo seed (tắt mặc định) ---
+      // function seedDemo(){ /* ...giống bản trước... */ }
+      // seedDemo();
+    })();
+</script>
