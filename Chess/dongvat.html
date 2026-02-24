@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Animal Board Solver (11x9)</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#111a33; --grid:#273255; --text:#e8eeff; --muted:#a9b3d6; --accent:#ffd54a; }
+    * { box-sizing: border-box; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    body { margin:0; background:var(--bg); color:var(--text); }
+    .wrap { display:grid; grid-template-columns: 1fr 320px; gap:12px; padding:12px; max-width:1000px; margin:0 auto; }
+    .card { background:var(--panel); border:1px solid #1e2a55; border-radius:10px; padding:12px; }
+    h1 { margin:0 0 8px; font-size:16px; }
+    h2 { margin:12px 0 6px; font-size:13px; color:var(--muted); font-weight:600; }
+    canvas { width:100%; height:auto; display:block; border-radius:8px; border:1px solid #1e2a55; background:#0d1530; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    label { font-size:11px; color:var(--muted); }
+    input, select, button {
+      background:#0d1530; color:var(--text);
+      border:1px solid #223067; border-radius:8px;
+      padding:6px 8px; font-size:12px;
+    }
+    button { cursor:pointer; }
+    button:hover { border-color:#3950a7; }
+    .btn-accent { border-color:#5a4a12; background:#1b1520; }
+    .btn-accent:hover { border-color:#ffd54a; }
+    .small { font-size:11px; color:var(--muted); line-height:1.3; }
+    .list { max-height:180px; overflow:auto; border:1px solid #223067; border-radius:8px; padding:6px; background:#0d1530; }
+    .pieceItem { display:flex; justify-content:space-between; gap:6px; padding:4px 6px; border-bottom:1px solid #1a2550; font-size:11px; }
+    .pieceItem:last-child { border-bottom:none; }
+    .pill { padding:1px 6px; border-radius:999px; border:1px solid #223067; color:var(--muted); font-size:11px; }
+    .warn { color:#ffcccb; }
+    .ok { color:#b9ffcb; }
+    .moves { white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size:11px; }
+    .move-highlight { background:#ffd54a20; border:2px solid #ffd54a; }
+    .spawn-highlight { background:#ff54d520; border:2px solid #ff54d5; }
+    .highlight-text { color:#ffd54a; font-weight:bold; }
+    .yellow-bar { margin-top:10px; height:30px; position:relative; background:#0d1530; border-radius:8px; border:1px solid #1e2a55; }
+    .yellow-cell { position:absolute; height:24px; top:3px; background:#ffd54a40; border:1px solid #ffd54a; border-radius:4px; transition:all 0.2s; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Animal Board Solver (11×9)</h1>
+    <div class="small">
+      Click chọn động vật → kéo và thả. Tự động rơi + xóa hàng. 
+      <b>Solve</b> tìm chuỗi nước đi tối ưu.
+    </div>
+    <div style="height:8px"></div>
+    <canvas id="cv" width="630" height="770"></canvas>
+    
+    <!-- Yellow bar placed BELOW the board -->
+    <div class="yellow-bar" id="yellowBar">
+      <!-- Yellow cells will be dynamically added here -->
+    </div>
+    
+    <div style="height:8px"></div>
+    <div class="row">
+      <button id="nextBtn">Next (spawn + resolve)</button>
+      <button id="solveBtn" class="btn-accent">Solve (tối ưu)</button>
+      <button id="undoBtn">Undo</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+    <div style="height:6px"></div>
+    <div class="small">
+      <span class="pill">Hàng đáy = r=0</span>
+      <span class="pill">Cột trái = c=0</span>
+      <span class="pill">Click/Kéo trên thanh vàng để chọn spawn</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Thêm động vật</h2>
+    <div class="row">
+      <label>Loài</label>
+      <select id="kindSel"></select>
+      <label>Row</label>
+      <input id="rIn" type="number" min="0" max="10" value="0" style="width:50px">
+      <label>Col</label>
+      <input id="cIn" type="number" min="0" max="8" value="0" style="width:50px">
+      <button id="addBtn">Add</button>
+    </div>
+
+    <h2>Danh sách động vật</h2>
+    <div id="pieceList" class="list"></div>
+
+    <h2>Spawn lượt tới</h2>
+    <div class="small">
+      Click/Kéo trên thanh vàng để chọn cột spawn. 
+      <b>Next</b> sẽ spawn động vật mới.
+    </div>
+    <div style="height:6px"></div>
+    <div class="row">
+      <label>Mode</label>
+      <select id="spawnMode">
+        <option value="random">Random</option>
+        <option value="det">Deterministic</option>
+      </select>
+      <label>w</label>
+      <input id="spawnW" type="number" min="1" max="5" value="3" style="width:50px">
+      <label>c</label>
+      <input id="spawnC" type="number" min="0" max="8" value="0" style="width:50px">
+    </div>
+
+    <h2>Solve</h2>
+    <div class="row">
+      <label>Độ sâu</label>
+      <input id="maxDepth" type="number" min="1" max="10" value="5" style="width:50px">
+      <button id="playPlanBtn">Play plan</button>
+      <span id="status" class="small"></span>
+    </div>
+    <div style="height:6px"></div>
+    <div id="planBox" class="list moves"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------------------------
+  // Constants
+  // ---------------------------
+  const W = 9, H = 11;
+  const FULL_ROW_MASK = (1 << W) - 1;
+  const cell = 70;
+
+  const ANIMALS = [
+    { kind:"Chim", w:1 },
+    { kind:"Hươu Hồng Nhỏ", w:1 },
+    { kind:"Hươu Hồng Lớn", w:2 },
+    { kind:"Ngựa Vằn", w:2 },
+    { kind:"Voi", w:3 },
+    { kind:"Sư Tử", w:3 },
+    { kind:"Ngựa Vằn Lớn", w:3 },
+    { kind:"Gấu Bắc Cực", w:4 },
+    { kind:"Trâu Đỏ", w:5 },
+  ];
+
+  // ---------------------------
+  // State
+  // ---------------------------
+  let pieces = [];
+  let nextId = 1;
+  let selectedId = null;
+  let isDraggingPiece = false;
+  let isDraggingYellow = false;
+  let dragStartX = 0, dragStartY = 0;
+  let dragOffsetX = 0, dragOffsetY = 0;
+
+  let yellow = Array(W).fill(false);
+  let highlightedMove = null;
+  let currentPlan = [];
+
+  const history = [];
+
+  function snapshot() {
+    history.push({
+      pieces: JSON.parse(JSON.stringify(pieces)),
+      yellow: yellow.slice(),
+      selectedId
+    });
+    if (history.length > 50) history.shift();
+  }
+
+  // ---------------------------
+  // Physics & Helpers
+  // ---------------------------
+  function maskFor(w, c) { return ((1 << w) - 1) << c; }
+
+  function buildRowMasks(ps) {
+    const rows = Array(H).fill(0);
+    for (const p of ps) rows[p.r] |= maskFor(p.w, p.c);
+    return rows;
+  }
+
+  function countBits(x) {
+    let count = 0;
+    while (x) { count += x & 1; x >>= 1; }
+    return count;
+  }
+
+  function isLegalPlacement(ps, testP, ignoreId=null) {
+    if (testP.c < 0 || testP.r < 0 || testP.r >= H) return false;
+    if (testP.c + testP.w > W) return false;
+    const others = ps.filter(x => x.id !== ignoreId);
+    const rows = buildRowMasks(others);
+    const m = maskFor(testP.w, testP.c);
+    return !(rows[testP.r] & m);
+  }
+
+  function findDropPosition(ps, piece, targetCol) {
+    const others = ps.filter(p => p.id !== piece.id);
+    const rows = buildRowMasks(others);
+    const mask = maskFor(piece.w, targetCol);
+    
+    for (let r = H - 1; r >= 0; r--) {
+      if ((rows[r] & mask) === 0) {
+        if (r === 0 || (rows[r - 1] & mask) !== 0) {
+          return r;
+        }
+      } else {
+        break;
+      }
+    }
+    return -1;
+  }
+
+  function autoResolve(ps) {
+    // Gravity
+    let changed = true;
+    ps = ps.map(p => ({...p}));
+    while (changed) {
+      changed = false;
+      const rows = buildRowMasks(ps);
+      for (let i = 0; i < ps.length; i++) {
+        const p = ps[i];
+        if (p.r === 0) continue;
+        if (!(rows[p.r - 1] & maskFor(p.w, p.c))) {
+          const targetR = findDropPosition(ps, p, p.c);
+          if (targetR !== -1 && targetR < p.r) {
+            p.r = targetR;
+            changed = true;
+          }
+        }
+      }
+    }
+
+    // Clear full rows
+    let cleared = 0;
+    while (true) {
+      const rows = buildRowMasks(ps);
+      const fullRows = [];
+      for (let r = 0; r < H; r++) {
+        if (rows[r] === FULL_ROW_MASK) fullRows.push(r);
+      }
+      if (!fullRows.length) break;
+
+      const fullSet = new Set(fullRows);
+      ps = ps.filter(p => !fullSet.has(p.r));
+      cleared += fullRows.length;
+      
+      // Re-apply gravity
+      ps = ps.map(p => ({...p}));
+      for (let i = 0; i < ps.length; i++) {
+        const targetR = findDropPosition(ps, ps[i], ps[i].c);
+        if (targetR !== -1) ps[i].r = targetR;
+      }
+    }
+
+    return { ps, cleared };
+  }
+
+  function contiguousChunks(cols) {
+    cols.sort((a,b)=>a-b);
+    const chunks = [];
+    let cur = [];
+    for (const c of cols) {
+      if (!cur.length || c === cur[cur.length-1] + 1) cur.push(c);
+      else { chunks.push(cur); cur = [c]; }
+    }
+    if (cur.length) chunks.push(cur);
+    return chunks;
+  }
+
+  function possibleSpawnsFromYellow() {
+    const cols = [];
+    for (let c=0;c<W;c++) if (yellow[c]) cols.push(c);
+    if (!cols.length) return [];
+
+    const chunks = contiguousChunks(cols);
+    const opts = [];
+    const allowedW = [1,2,3,4,5];
+
+    for (const ch of chunks) {
+      const start = ch[0], L = ch.length;
+      for (const w of allowedW) {
+        if (w <= L) {
+          for (let c = start; c <= start + L - w; c++) {
+            opts.push({ w, c });
+          }
+        }
+      }
+    }
+    return opts;
+  }
+
+  function placeSpawn(ps, spawn) {
+    const m = maskFor(spawn.w, spawn.c);
+    const rows = buildRowMasks(ps);
+    for (let r=H-1; r>=0; r--) {
+      if ((rows[r] & m) === 0) {
+        const p = { id: nextId++, r, c: spawn.c, w: spawn.w, kind: `ID[${nextId-1}]` };
+        return ps.concat([p]);
+      }
+    }
+    return null;
+  }
+
+  // ---------------------------
+  // Optimized Solver
+  // ---------------------------
+  function heuristic(ps) {
+    const rows = buildRowMasks(ps);
+    let score = 0;
+    
+    for (let r = 0; r < H; r++) {
+      const filled = countBits(rows[r]);
+      if (filled >= W - 1) score += 1000;
+      else if (filled >= W - 2) score += 100;
+      else score += filled * filled;
+    }
+    
+    let maxHeight = 0;
+    for (let r = H-1; r >=0; r--) {
+      if (rows[r]) { maxHeight = H - r; break; }
+    }
+    score -= maxHeight * 5;
+    
+    return score;
+  }
+
+  function generateSmartMoves(ps) {
+    const moves = [];
+    const currentScore = heuristic(ps);
+    
+    for (const p of ps) {
+      for (let c = 0; c <= W - p.w; c++) {
+        if (c === p.c) continue;
+        
+        const targetR = findDropPosition(ps, p, c);
+        if (targetR !== -1) {
+          const newState = applyMove(ps, { pieceId: p.id, r: targetR, c });
+          const resolved = autoResolve(newState).ps;
+          const newScore = heuristic(resolved);
+          
+          if (newScore > currentScore + 10) {
+            moves.push({ pieceId: p.id, r: targetR, c, score: newScore });
+          }
+        }
+      }
+    }
+    
+    moves.sort((a, b) => b.score - a.score);
+    return moves.slice(0, 15);
+  }
+
+  function canon(ps) {
+    const a = ps.slice().sort((p,q) =>
+      (p.r-q.r) || (p.c-q.c) || (p.w-q.w)
+    );
+    return a.map(p => `${p.r},${p.c},${p.w}`).join("|");
+  }
+
+  function applyMove(ps, mv) {
+    return ps.map(p => p.id === mv.pieceId ? ({...p, r: mv.r, c: mv.c}) : ({...p}));
+  }
+
+  function solveMinMoves(maxDepth) {
+    const startResolved = autoResolve(pieces).ps;
+    if (autoResolve(pieces).cleared > 0) return [];
+
+    const queue = [{ 
+      ps: startResolved, 
+      path: [], 
+      priority: heuristic(startResolved)
+    }];
+    
+    const seen = new Set([canon(startResolved)]);
+    let expanded = 0;
+    const MAX_EXPANDED = 20000;
+
+    while (queue.length && expanded < MAX_EXPANDED) {
+      expanded++;
+      queue.sort((a, b) => b.priority - a.priority);
+      const cur = queue.pop();
+      
+      if (cur.path.length >= maxDepth) continue;
+
+      const moves = generateSmartMoves(cur.ps);
+      
+      for (const mv of moves) {
+        let newState = applyMove(cur.ps, mv);
+        let result = autoResolve(newState);
+        
+        const spawnMode = document.getElementById("spawnMode").value;
+        let spawns = [];
+        
+        if (spawnMode === "det") {
+          const w = Math.min(5, Math.max(1, +document.getElementById("spawnW").value || 3));
+          const c = Math.min(8, Math.max(0, +document.getElementById("spawnC").value || 0));
+          spawns = [{ w, c }];
+        } else {
+          spawns = possibleSpawnsFromYellow();
+          if (!spawns.length) spawns = [null];
+        }
+
+        for (const sp of spawns.slice(0, 2)) {
+          let finalState = result.ps;
+          if (sp) {
+            const withSpawn = placeSpawn(finalState, sp);
+            if (withSpawn) finalState = autoResolve(withSpawn).ps;
+          }
+          
+          if (result.cleared > 0) {
+            return cur.path.concat([mv]);
+          }
+
+          const key = canon(finalState);
+          if (!seen.has(key)) {
+            seen.add(key);
+            const h = heuristic(finalState);
+            queue.push({
+              ps: finalState,
+              path: cur.path.concat([mv]),
+              priority: h
+            });
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  // ---------------------------
+  // Enhanced UI Rendering
+  // ---------------------------
+  const cv = document.getElementById("cv");
+  const ctx = cv.getContext("2d");
+  cv.width = W * cell;
+  cv.height = H * cell;
+
+  function boardToCanvasY(r) {
+    return (H - 1 - r) * cell;
+  }
+
+  function drawYellowBar() {
+    const yellowBar = document.getElementById("yellowBar");
+    yellowBar.innerHTML = "";
+    
+    const barWidth = yellowBar.offsetWidth;
+    const cellWidth = barWidth / W;
+    
+    for (let c = 0; c < W; c++) {
+      const cellDiv = document.createElement("div");
+      cellDiv.className = "yellow-cell";
+      cellDiv.style.left = (c * cellWidth) + "px";
+      cellDiv.style.width = (cellWidth - 2) + "px";
+      cellDiv.style.backgroundColor = yellow[c] ? "#ffd54a40" : "transparent";
+      cellDiv.style.borderColor = yellow[c] ? "#ffd54a" : "transparent";
+      cellDiv.dataset.col = c;
+      yellowBar.appendChild(cellDiv);
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+
+    // Grid
+    ctx.strokeStyle = "#273255";
+    ctx.lineWidth = 1;
+    for (let r = 0; r < H; r++) {
+      for (let c = 0; c < W; c++) {
+        const x = c * cell;
+        const y = boardToCanvasY(r);
+        ctx.strokeRect(x, y, cell, cell);
+      }
+    }
+
+    // Highlight for current move plan
+    if (highlightedMove) {
+      const p = pieces.find(x => x.id === highlightedMove.pieceId);
+      if (p) {
+        const x = p.c * cell;
+        const y = boardToCanvasY(p.r);
+        ctx.strokeStyle = "#ffd54a";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x+1, y+1, p.w*cell-2, cell-2);
+        
+        const tx = highlightedMove.c * cell;
+        const ty = boardToCanvasY(highlightedMove.r);
+        ctx.strokeStyle = "#54ffd5";
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(tx+1, ty+1, p.w*cell-2, cell-2);
+        ctx.setLineDash([]);
+      }
+    }
+
+    // Pieces with simplified display
+    function kindColor(id) {
+      return `hsl(${(id * 137) % 360} 70% 60%)`;
+    }
+
+    for (const p of pieces) {
+      const x = p.c * cell;
+      const y = boardToCanvasY(p.r);
+      
+      // Main piece
+      ctx.fillStyle = kindColor(p.id);
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(x+2, y+2, p.w*cell-4, cell-4);
+      
+      // Border
+      ctx.strokeStyle = (p.id === selectedId) ? "#ffd54a" : "#0d1530";
+      ctx.lineWidth = (p.id === selectedId) ? 3 : 2;
+      ctx.strokeRect(x+2, y+2, p.w*cell-4, cell-4);
+      
+      // Simplified text - Only ID and size
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 14px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      
+      const centerX = x + (p.w * cell) / 2;
+      const centerY = y + cell / 2;
+      
+      ctx.fillText(`ID[${p.id}]`, centerX, centerY - 8);
+      
+      ctx.fillStyle = "#ffd54a";
+      ctx.font = "bold 16px system-ui";
+      ctx.fillText(`[${p.w} Ô]`, centerX, centerY + 10);
+      
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+    }
+
+    drawYellowBar();
+    renderPieceList();
+  }
+
+  function renderPieceList() {
+    const box = document.getElementById("pieceList");
+    box.innerHTML = "";
+    const sorted = pieces.slice().sort((a,b)=>a.id-b.id);
+    for (const p of sorted) {
+      const div = document.createElement("div");
+      div.className = "pieceItem";
+      div.innerHTML = `
+        <div>
+          <div><b>ID[${p.id}]</b> <span class="pill" style="color:#ffd54a">${p.w} ô</span></div>
+          <div class="small">r:${p.r} • c:${p.c}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+          <button data-act="sel" data-id="${p.id}" style="font-size:10px; padding:3px 6px;">${p.id===selectedId ? "Đã chọn" : "Chọn"}</button>
+          <button data-act="del" data-id="${p.id}" style="font-size:10px; padding:3px 6px;">Xóa</button>
+        </div>
+      `;
+      box.appendChild(div);
+    }
+    
+    box.querySelectorAll("button").forEach(btn=>{
+      btn.addEventListener("click", () => {
+        const act = btn.dataset.act;
+        const id = +btn.dataset.id;
+        if (act === "sel") {
+          selectedId = (selectedId === id ? null : id);
+          draw();
+        } else if (act === "del") {
+          snapshot();
+          pieces = pieces.filter(p => p.id !== id);
+          if (selectedId === id) selectedId = null;
+          draw();
+        }
+      });
+    });
+  }
+
+  // ---------------------------
+  // Enhanced Interactions
+  // ---------------------------
+  // Yellow bar interactions
+  document.getElementById("yellowBar").addEventListener("mousedown", (e) => {
+    isDraggingYellow = true;
+    const rect = e.target.getBoundingClientRect();
+    const barRect = document.getElementById("yellowBar").getBoundingClientRect();
+    const x = e.clientX - barRect.left;
+    const cellWidth = barRect.width / W;
+    const col = Math.floor(x / cellWidth);
+    
+    if (col >= 0 && col < W) {
+      yellow[col] = !yellow[col];
+      draw();
+    }
+  });
+
+  document.getElementById("yellowBar").addEventListener("mousemove", (e) => {
+    if (!isDraggingYellow) return;
+    
+    const barRect = document.getElementById("yellowBar").getBoundingClientRect();
+    const x = e.clientX - barRect.left;
+    const cellWidth = barRect.width / W;
+    const col = Math.floor(x / cellWidth);
+    
+    if (col >= 0 && col < W) {
+      yellow[col] = true;
+      draw();
+    }
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (isDraggingYellow) {
+      isDraggingYellow = false;
+      snapshot();
+    }
+  });
+
+  // Canvas interactions for pieces
+  cv.addEventListener("mousedown", (e) => {
+    const rect = cv.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (cv.width / rect.width);
+    const my = (e.clientY - rect.top) * (cv.height / rect.height);
+    const c = Math.floor(mx / cell);
+    const r = H - 1 - Math.floor(my / cell);
+
+    // Select piece
+    const hit = pieces.find(p => p.r === r && c >= p.c && c < p.c + p.w);
+    if (hit) {
+      selectedId = hit.id;
+      isDraggingPiece = true;
+      dragStartX = mx;
+      dragStartY = my;
+      dragOffsetX = mx - (hit.c * cell);
+      dragOffsetY = my - boardToCanvasY(hit.r);
+      draw();
+    }
+  });
+
+  cv.addEventListener("mousemove", (e) => {
+    if (!isDraggingPiece || selectedId === null) return;
+    
+    const rect = cv.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (cv.width / rect.width);
+    const my = (e.clientY - rect.top) * (cv.height / rect.height);
+    
+    const p = pieces.find(x => x.id === selectedId);
+    if (!p) return;
+    
+    // Calculate target position based on mouse position
+    const targetC = Math.max(0, Math.min(W - p.w, Math.floor((mx - dragOffsetX) / cell)));
+    const targetR = Math.max(0, Math.min(H - 1, H - 1 - Math.floor((my - dragOffsetY) / cell)));
+    
+    if (targetC !== p.c || targetR !== p.r) {
+      const temp = { ...p, r: targetR, c: targetC };
+      if (isLegalPlacement(pieces, temp, p.id)) {
+        p.r = targetR;
+        p.c = targetC;
+        draw();
+      }
+    }
+  });
+
+  cv.addEventListener("mouseup", (e) => {
+    if (!isDraggingPiece) return;
+    isDraggingPiece = false;
+    
+    if (selectedId !== null) {
+      snapshot();
+      // Auto-resolve after drop
+      const result = autoResolve(pieces);
+      pieces = result.ps;
+      if (result.cleared > 0) {
+        setStatus(`Đã xóa ${result.cleared} hàng!`, false);
+      }
+      draw();
+    }
+  });
+
+  cv.addEventListener("click", (e) => {
+    if (isDraggingPiece) return;
+    
+    const rect = cv.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (cv.width / rect.width);
+    const my = (e.clientY - rect.top) * (cv.height / rect.height);
+    const c = Math.floor(mx / cell);
+    const r = H - 1 - Math.floor(my / cell);
+
+    // Place selected piece
+    if (selectedId != null) {
+      const p = pieces.find(x => x.id === selectedId);
+      if (!p) return;
+      
+      const target = { ...p, r, c };
+      if (isLegalPlacement(pieces, target, p.id)) {
+        snapshot();
+        p.r = r;
+        p.c = c;
+        // Auto-resolve
+        const result = autoResolve(pieces);
+        pieces = result.ps;
+        draw();
+      }
+    }
+  });
+
+  function setStatus(msg, isWarn=false) {
+    const el = document.getElementById("status");
+    el.textContent = msg;
+    el.className = "small " + (isWarn ? "warn" : "ok");
+  }
+
+  // ---------------------------
+  // Button Handlers
+  // ---------------------------
+  document.getElementById("nextBtn").addEventListener("click", () => {
+    snapshot();
+    let result = autoResolve(pieces);
+    pieces = result.ps;
+
+    const mode = document.getElementById("spawnMode").value;
+    let spawn = null;
+    
+    if (mode === "det") {
+      const w = Math.min(5, Math.max(1, +document.getElementById("spawnW").value || 3));
+      const c = Math.min(8, Math.max(0, +document.getElementById("spawnC").value || 0));
+      spawn = { w, c };
+    } else {
+      const opts = possibleSpawnsFromYellow();
+      if (opts.length) spawn = opts[Math.floor(Math.random()*opts.length)];
+    }
+
+    if (spawn) {
+      const placed = placeSpawn(pieces, spawn);
+      if (placed) pieces = placed;
+    }
+
+    result = autoResolve(pieces);
+    pieces = result.ps;
+    setStatus(result.cleared ? `Next: xóa ${result.cleared} hàng` : "Next: không xóa hàng", !result.cleared);
+    draw();
+  });
+
+  document.getElementById("solveBtn").addEventListener("click", () => {
+    const maxDepth = Math.min(10, Math.max(1, +document.getElementById("maxDepth").value || 5));
+    setStatus("Đang tính toán...", false);
+    
+    const oldText = document.getElementById("solveBtn").textContent;
+    document.getElementById("solveBtn").textContent = "Đang tính...";
+    document.getElementById("solveBtn").disabled = true;
+    
+    setTimeout(() => {
+      const plan = solveMinMoves(maxDepth);
+      currentPlan = plan || [];
+      
+      document.getElementById("solveBtn").textContent = oldText;
+      document.getElementById("solveBtn").disabled = false;
+      
+      const planBox = document.getElementById("planBox");
+      if (!plan) {
+        planBox.textContent = "Không tìm thấy giải pháp. Thử tăng độ sâu hoặc thay đổi bảng.";
+        setStatus("Không tìm thấy", true);
+      } else if (plan.length === 0) {
+        planBox.textContent = "Có thể clear ngay!";
+        setStatus("Clear được ngay", false);
+      } else {
+        planBox.textContent = plan.map((m, i) => {
+          const piece = pieces.find(p => p.id === m.pieceId);
+          return `${i+1}. Di chuyển ID[${m.pieceId}] đến (hàng ${m.r}, cột ${m.c})`;
+        }).join("\n");
+        setStatus(`Tìm thấy ${plan.length} bước`, false);
+        
+        if (plan.length > 0) {
+          highlightedMove = plan[0];
+          draw();
+        }
+      }
+    }, 10);
+  });
+
+  document.getElementById("playPlanBtn").addEventListener("click", () => {
+    if (currentPlan.length === 0) {
+      setStatus("Chưa có kế hoạch", true);
+      return;
+    }
+    
+    let step = 0;
+    const playStep = () => {
+      if (step >= currentPlan.length) {
+        setStatus("Hoàn thành!", false);
+        highlightedMove = null;
+        draw();
+        return;
+      }
+      
+      const mv = currentPlan[step];
+      highlightedMove = mv;
+      snapshot();
+      
+      const piece = pieces.find(p => p.id === mv.pieceId);
+      if (piece) {
+        piece.r = mv.r;
+        piece.c = mv.c;
+      }
+      
+      const result = autoResolve(pieces);
+      pieces = result.ps;
+      
+      setStatus(`Bước ${step+1}/${currentPlan.length}`, false);
+      draw();
+      
+      step++;
+      setTimeout(playStep, 800);
+    };
+    
+    playStep();
+  });
+
+  document.getElementById("undoBtn").addEventListener("click", () => {
+    const s = history.pop();
+    if (!s) { setStatus("Không thể undo", true); return; }
+    pieces = s.pieces;
+    yellow = s.yellow;
+    selectedId = s.selectedId;
+    highlightedMove = null;
+    setStatus("", false);
+    draw();
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    snapshot();
+    pieces = [];
+    yellow = Array(W).fill(false);
+    selectedId = null;
+    highlightedMove = null;
+    currentPlan = [];
+    setStatus("Đã reset", false);
+    draw();
+  });
+
+  // Add piece functionality
+  const kindSel = document.getElementById("kindSel");
+  for (const a of ANIMALS) {
+    const opt = document.createElement("option");
+    opt.value = a.kind;
+    opt.textContent = `${a.kind} (${a.w} ô)`;
+    kindSel.appendChild(opt);
+  }
+
+  document.getElementById("addBtn").addEventListener("click", () => {
+    const kind = kindSel.value;
+    const a = ANIMALS.find(x => x.kind === kind);
+    const r = Math.min(10, Math.max(0, +document.getElementById("rIn").value || 0));
+    const c = Math.min(8, Math.max(0, +document.getElementById("cIn").value || 0));
+    const p = { id: nextId++, kind: `ID[${nextId-1}]`, w: a.w, r, c };
+    
+    if (!isLegalPlacement(pieces, p, null)) {
+      setStatus("Vị trí không hợp lệ", true);
+      return;
+    }
+    
+    snapshot();
+    pieces.push(p);
+    setStatus("Đã thêm", false);
+    draw();
+  });
+
+  // Demo seed
+  function seedDemo() {
+    pieces = [];
+    nextId = 1;
+    pieces.push({ id: nextId++, kind: "ID[1]", w: 3, r: 0, c: 0 });
+    pieces.push({ id: nextId++, kind: "ID[2]", w: 3, r: 1, c: 2 });
+    yellow = Array(W).fill(false);
+    yellow[0] = yellow[1] = yellow[2] = true;
+    selectedId = null;
+  }
+
+  seedDemo();
+  draw();
+})();
+</script>
+</body>
+</html>
